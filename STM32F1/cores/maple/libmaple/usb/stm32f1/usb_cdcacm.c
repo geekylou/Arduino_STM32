@@ -66,9 +66,11 @@
     You may have problems on non-LeafLabs boards.
 #endif
 
+
 static void vcomDataTxCb(void);
 static void vcomDataRxCb(void);
 static uint8* vcomGetSetLineCoding(uint16);
+static void fastDataRxCb_int(void);
 
 static void usbInit(void);
 static void usbReset(void);
@@ -87,12 +89,14 @@ static void usbSetDeviceAddress(void);
 
 /* FIXME move to Wirish */
 #define LEAFLABS_ID_VENDOR                0x1EAF
-#define MAPLE_ID_PRODUCT                  0x0004
+#define MAPLE_ID_PRODUCT                  0x0006
 static const usb_descriptor_device usbVcomDescriptor_Device =
     USB_CDCACM_DECLARE_DEV_DESC(LEAFLABS_ID_VENDOR, MAPLE_ID_PRODUCT);
 
 typedef struct {
     usb_descriptor_config_header Config_Header;
+    usb_descriptor_interface     FAST_Interface;
+    usb_descriptor_endpoint      FAST_DataOutEndpoint;
     usb_descriptor_interface     CCI_Interface;
     CDC_FUNCTIONAL_DESCRIPTOR(2) CDC_Functional_IntHeader;
     CDC_FUNCTIONAL_DESCRIPTOR(2) CDC_Functional_CallManagement;
@@ -110,7 +114,7 @@ static const usb_descriptor_config usbVcomDescriptor_Config = {
         .bLength              = sizeof(usb_descriptor_config_header),
         .bDescriptorType      = USB_DESCRIPTOR_TYPE_CONFIGURATION,
         .wTotalLength         = sizeof(usb_descriptor_config),
-        .bNumInterfaces       = 0x02,
+        .bNumInterfaces       = 0x03,
         .bConfigurationValue  = 0x01,
         .iConfiguration       = 0x00,
         .bmAttributes         = (USB_CONFIG_ATTR_BUSPOWERED |
@@ -121,7 +125,7 @@ static const usb_descriptor_config usbVcomDescriptor_Config = {
     .CCI_Interface = {
         .bLength            = sizeof(usb_descriptor_interface),
         .bDescriptorType    = USB_DESCRIPTOR_TYPE_INTERFACE,
-        .bInterfaceNumber   = 0x00,
+        .bInterfaceNumber   = 0x01,
         .bAlternateSetting  = 0x00,
         .bNumEndpoints      = 0x01,
         .bInterfaceClass    = USB_INTERFACE_CLASS_CDC,
@@ -155,7 +159,7 @@ static const usb_descriptor_config usbVcomDescriptor_Config = {
         .bLength         = CDC_FUNCTIONAL_DESCRIPTOR_SIZE(2),
         .bDescriptorType = 0x24,
         .SubType         = 0x06,
-        .Data            = {0x00, 0x01},
+        .Data            = {0x01, 0x02},
     },
 
     .ManagementEndpoint = {
@@ -171,7 +175,7 @@ static const usb_descriptor_config usbVcomDescriptor_Config = {
     .DCI_Interface = {
         .bLength            = sizeof(usb_descriptor_interface),
         .bDescriptorType    = USB_DESCRIPTOR_TYPE_INTERFACE,
-        .bInterfaceNumber   = 0x01,
+        .bInterfaceNumber   = 0x02,
         .bAlternateSetting  = 0x00,
         .bNumEndpoints      = 0x02,
         .bInterfaceClass    = USB_INTERFACE_CLASS_DIC,
@@ -198,6 +202,28 @@ static const usb_descriptor_config usbVcomDescriptor_Config = {
         .wMaxPacketSize   = USB_CDCACM_TX_EPSIZE,
         .bInterval        = 0x00,
     },
+ 
+#if 1 
+    .FAST_Interface = {
+        .bLength            = sizeof(usb_descriptor_interface),
+        .bDescriptorType    = USB_DESCRIPTOR_TYPE_INTERFACE,
+        .bInterfaceNumber   = 0x00,
+        .bAlternateSetting  = 0x00,
+        .bNumEndpoints      = 0x01,
+        .bInterfaceClass    = 0xff, //USB_INTERFACE_CLASS_VENDOR, //USB_INTERFACE_CLASS_DIC,
+        .bInterfaceSubClass = 0x00, /* None */
+        .bInterfaceProtocol = 0x00, /* None */
+        .iInterface         = 0x00,
+    },
+    .FAST_DataOutEndpoint = {
+        .bLength          = sizeof(usb_descriptor_endpoint),
+        .bDescriptorType  = USB_DESCRIPTOR_TYPE_ENDPOINT,
+        .bEndpointAddress = (USB_DESCRIPTOR_ENDPOINT_OUT | 0x4 /*USB_CDCACM_RX_ENDP*/),
+        .bmAttributes     = USB_EP_TYPE_BULK,
+        .wMaxPacketSize   = USB_FAST_EPSIZE,
+        .bInterval        = 0x00,
+    },
+#endif
 };
 
 /*
@@ -304,7 +330,7 @@ static void (*ep_int_out[7])(void) =
     {NOP_Process,
      NOP_Process,
      vcomDataRxCb,
-     NOP_Process,
+     fastDataRxCb_int,
      NOP_Process,
      NOP_Process,
      NOP_Process};
@@ -316,7 +342,7 @@ static void (*ep_int_out[7])(void) =
  * functionality.
  */
 
-#define NUM_ENDPTS                0x04
+#define NUM_ENDPTS                0x05
 __weak DEVICE Device_Table = {
     .Total_Endpoint      = NUM_ENDPTS,
     .Total_Configuration = 1
@@ -577,6 +603,46 @@ static void vcomDataRxCb(void) {
     }
 }
 
+uint32 ready_for_data = 0;
+uint32 ep_rx_size[4]= {0xff,0xff,0xff,0xff};
+uint8  ep_rx_data[4][64];
+
+void checkFastCallback()
+{
+    //noInterrupt();
+    //if (ready_for_data)
+    {   
+        int count;
+        for (count=0; count < 4; count++)
+        {   
+            if (ep_rx_size[count] != 0xff)
+            {
+                fastDataRxCb(ep_rx_size[count], ep_rx_data[count]);
+                ep_rx_size[count] = 0xff;
+                usb_set_ep_rx_stat(USB_FAST_ENDP, USB_EP_STAT_RX_VALID);
+            }   
+        }
+        ready_for_data=0;
+    }
+    //interrupt();
+}
+
+static void fastDataRxCb_int()
+{
+    int count;
+    for (count=0; count < 4; count++)
+        if (ep_rx_size[count] == 0xff)
+        {
+            ep_rx_size[count] = usb_get_ep_rx_count(USB_FAST_ENDP);
+            usb_copy_from_pma((uint8*)&ep_rx_data[count], ep_rx_size[count],
+                      USB_FAST_ADDR);
+            ready_for_data = 1;
+            
+            if (count < 4)
+                usb_set_ep_rx_stat(USB_FAST_ENDP, USB_EP_STAT_RX_VALID);
+        }
+}
+
 static uint8* vcomGetSetLineCoding(uint16 length) {
     if (length == 0) {
         pInformation->Ctrl_Info.Usb_wLength = sizeof(struct usb_cdcacm_line_coding);
@@ -643,7 +709,12 @@ static void usbReset(void) {
     usb_set_ep_tx_addr(USB_CDCACM_TX_ENDP, USB_CDCACM_TX_ADDR);
     usb_set_ep_tx_stat(USB_CDCACM_TX_ENDP, USB_EP_STAT_TX_NAK);
     usb_set_ep_rx_stat(USB_CDCACM_TX_ENDP, USB_EP_STAT_RX_DISABLED);
-
+    
+    /* set up data endpoint OUT (FAST) */
+    usb_set_ep_type(USB_FAST_ENDP, USB_EP_EP_TYPE_BULK);
+    usb_set_ep_rx_addr(USB_FAST_ENDP, USB_FAST_ADDR);
+    usb_set_ep_rx_count(USB_FAST_ENDP, USB_FAST_EPSIZE);
+    usb_set_ep_rx_stat(USB_FAST_ENDP, USB_EP_STAT_RX_VALID);
     USBLIB->state = USB_ATTACHED;
     SetDeviceAddress(0);
 

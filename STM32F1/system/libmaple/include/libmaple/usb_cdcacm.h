@@ -39,6 +39,11 @@
 #include <libmaple/usb.h>
 
 #ifdef __cplusplus
+extern "C"
+{
+  void fastDataRxCb(uint32 ep_rx_size, uint8 *ep_rx_data);
+  void checkFastCallback();
+}
 extern "C" {
 #endif
 
@@ -93,14 +98,21 @@ extern "C" {
 #define USB_CDCACM_RX_ADDR              0x110
 #define USB_CDCACM_RX_EPSIZE            0x40
 
+#define USB_FAST_ENDP              4
+#define USB_FAST_ADDR              0x150
+#define USB_FAST_EPSIZE            0x40
 #ifndef __cplusplus
+
+// USB_DEVICE_CLASS_CDC,                       \
+USB_DEVICE_SUBCLASS_CDC,                    \
+
 #define USB_CDCACM_DECLARE_DEV_DESC(vid, pid)                           \
   {                                                                     \
       .bLength            = sizeof(usb_descriptor_device),              \
       .bDescriptorType    = USB_DESCRIPTOR_TYPE_DEVICE,                 \
       .bcdUSB             = 0x0200,                                     \
-      .bDeviceClass       = USB_DEVICE_CLASS_CDC,                       \
-      .bDeviceSubClass    = USB_DEVICE_SUBCLASS_CDC,                    \
+      .bDeviceClass       = 239,\
+      .bDeviceSubClass    = 2,\
       .bDeviceProtocol    = 0x00,                                       \
       .bMaxPacketSize0    = 0x40,                                       \
       .idVendor           = vid,                                        \

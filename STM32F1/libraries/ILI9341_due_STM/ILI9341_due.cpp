@@ -158,15 +158,15 @@ bool ILI9341_due::begin(void)
 		_isInSleep = _isIdle = false;
 
 		uint8_t x = readcommand8(ILI9341_RDMODE);
-		Serial.print(F("\nDisplay Power Mode: 0x")); Serial.println(x, HEX);
+		//Serial.print(F("\nDisplay Power Mode: 0x")); Serial.println(x, HEX);
 		x = readcommand8(ILI9341_RDMADCTL);
-		Serial.print(F("\nMADCTL Mode: 0x")); Serial.println(x, HEX);
+		//Serial.print(F("\nMADCTL Mode: 0x")); Serial.println(x, HEX);
 		x = readcommand8(ILI9341_RDPIXFMT);
-		Serial.print(F("\nPixel Format: 0x")); Serial.println(x, HEX);
+		//Serial.print(F("\nPixel Format: 0x")); Serial.println(x, HEX);
 		x = readcommand8(ILI9341_RDIMGFMT);
-		Serial.print(F("\nImage Format: 0x")); Serial.println(x, HEX);
+		//Serial.print(F("\nImage Format: 0x")); Serial.println(x, HEX);
 		x = readcommand8(ILI9341_RDSELFDIAG);
-		Serial.print(F("\nSelf Diagnostic: 0x")); Serial.println(x, HEX);
+		//Serial.print(F("\nSelf Diagnostic: 0x")); Serial.println(x, HEX);
 
 		return true;
 	}
