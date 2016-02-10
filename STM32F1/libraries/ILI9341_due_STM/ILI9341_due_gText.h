@@ -227,7 +227,7 @@ typedef struct _area
 // graphical device text routines
 class ILI9341_due_gText : public Print
 {
-private:
+    public:
 	ILI9341_due *_ili;
 	//FontCallback	ucg_pgm_read;     // now static, move back here if each instance needs its own callback
 	uint16_t _fontColor;
@@ -240,7 +240,7 @@ private:
 	uint8_t _letterSpacing;
 	bool _isLastChar;
 	uint8_t _fontMode;
-	
+    private:	
 #ifndef GLCD_NODEFER_SCROLL
 	uint8_t			_needScroll; // set when text scroll has been defered
 #endif
