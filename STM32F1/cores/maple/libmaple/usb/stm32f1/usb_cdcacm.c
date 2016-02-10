@@ -95,8 +95,7 @@ static const usb_descriptor_device usbVcomDescriptor_Device =
 
 typedef struct {
     usb_descriptor_config_header Config_Header;
-    usb_descriptor_interface     FAST_Interface;
-    usb_descriptor_endpoint      FAST_DataOutEndpoint;
+    usb_descriptor_interface_association CDC_InterfaceAssoication;
     usb_descriptor_interface     CCI_Interface;
     CDC_FUNCTIONAL_DESCRIPTOR(2) CDC_Functional_IntHeader;
     CDC_FUNCTIONAL_DESCRIPTOR(2) CDC_Functional_CallManagement;
@@ -106,6 +105,9 @@ typedef struct {
     usb_descriptor_interface     DCI_Interface;
     usb_descriptor_endpoint      DataOutEndpoint;
     usb_descriptor_endpoint      DataInEndpoint;
+    usb_descriptor_interface_association FAST_InterfaceAssoication;
+    usb_descriptor_interface     FAST_Interface;
+    usb_descriptor_endpoint      FAST_DataOutEndpoint;
 } __packed usb_descriptor_config;
 
 #define MAX_POWER (100 >> 1)
@@ -121,11 +123,20 @@ static const usb_descriptor_config usbVcomDescriptor_Config = {
                                  USB_CONFIG_ATTR_SELF_POWERED),
         .bMaxPower            = MAX_POWER,
     },
-
+    .CDC_InterfaceAssoication = {
+        .bLength            = sizeof(usb_descriptor_interface_association),
+        .bDescriptorType    = USB_DESCRIPTOR_TYPE_INTERFACE_ASSOCIATION,
+        .bFirstInterface    = 0x0,
+        .bInterfaceCount    = 0x2,
+        .bFunctionClass     = USB_DEVICE_CLASS_CDC,
+        .bFunctionSubClass  = USB_DEVICE_SUBCLASS_CDC,
+        .bFunctionProtocol  = 0x00,
+        .iFunction          = 0x01,        
+    },
     .CCI_Interface = {
         .bLength            = sizeof(usb_descriptor_interface),
         .bDescriptorType    = USB_DESCRIPTOR_TYPE_INTERFACE,
-        .bInterfaceNumber   = 0x01,
+        .bInterfaceNumber   = 0x00,
         .bAlternateSetting  = 0x00,
         .bNumEndpoints      = 0x01,
         .bInterfaceClass    = USB_INTERFACE_CLASS_CDC,
@@ -145,7 +156,7 @@ static const usb_descriptor_config usbVcomDescriptor_Config = {
         .bLength         = CDC_FUNCTIONAL_DESCRIPTOR_SIZE(2),
         .bDescriptorType = 0x24,
         .SubType         = 0x01,
-        .Data            = {0x03, 0x01},
+        .Data            = {0x02, 0x00},
     },
 
     .CDC_Functional_ACM = {
@@ -159,7 +170,7 @@ static const usb_descriptor_config usbVcomDescriptor_Config = {
         .bLength         = CDC_FUNCTIONAL_DESCRIPTOR_SIZE(2),
         .bDescriptorType = 0x24,
         .SubType         = 0x06,
-        .Data            = {0x01, 0x02},
+        .Data            = {0x00, 0x01},
     },
 
     .ManagementEndpoint = {
@@ -175,7 +186,7 @@ static const usb_descriptor_config usbVcomDescriptor_Config = {
     .DCI_Interface = {
         .bLength            = sizeof(usb_descriptor_interface),
         .bDescriptorType    = USB_DESCRIPTOR_TYPE_INTERFACE,
-        .bInterfaceNumber   = 0x02,
+        .bInterfaceNumber   = 0x01,
         .bAlternateSetting  = 0x00,
         .bNumEndpoints      = 0x02,
         .bInterfaceClass    = USB_INTERFACE_CLASS_DIC,
@@ -203,11 +214,21 @@ static const usb_descriptor_config usbVcomDescriptor_Config = {
         .bInterval        = 0x00,
     },
  
-#if 1 
+#if 1
+    .FAST_InterfaceAssoication = {
+        .bLength            = sizeof(usb_descriptor_interface_association),
+        .bDescriptorType    = USB_DESCRIPTOR_TYPE_INTERFACE_ASSOCIATION,
+        .bFirstInterface    = 0x2,
+        .bInterfaceCount    = 0x1,
+        .bFunctionClass     = 0xff,
+        .bFunctionSubClass  = USB_DEVICE_SUBCLASS_CDC,
+        .bFunctionProtocol  = 0x00,
+        .iFunction          = 0x02,        
+    },
     .FAST_Interface = {
         .bLength            = sizeof(usb_descriptor_interface),
         .bDescriptorType    = USB_DESCRIPTOR_TYPE_INTERFACE,
-        .bInterfaceNumber   = 0x00,
+        .bInterfaceNumber   = 0x02,
         .bAlternateSetting  = 0x00,
         .bNumEndpoints      = 0x01,
         .bInterfaceClass    = 0xff, //USB_INTERFACE_CLASS_VENDOR, //USB_INTERFACE_CLASS_DIC,
@@ -278,6 +299,7 @@ static ONE_DESCRIPTOR Config_Descriptor = {
 static ONE_DESCRIPTOR String_Descriptor[N_STRING_DESCRIPTORS] = {
     {(uint8*)&usbVcomDescriptor_LangID,       USB_DESCRIPTOR_STRING_LEN(1)},
     {(uint8*)&usbVcomDescriptor_iManufacturer,USB_DESCRIPTOR_STRING_LEN(8)},
+    {(uint8*)&usbVcomDescriptor_iProduct,     USB_DESCRIPTOR_STRING_LEN(5)},
     {(uint8*)&usbVcomDescriptor_iProduct,     USB_DESCRIPTOR_STRING_LEN(5)}
 };
 
@@ -604,25 +626,26 @@ static void vcomDataRxCb(void) {
 }
 
 uint32 ready_for_data = 0;
-uint32 ep_rx_size[4]= {0xff,0xff,0xff,0xff};
-uint8  ep_rx_data[4][64];
+uint32 ep_rx_size[1]= {0xff};
+uint8  ep_rx_data[1][65];
 
 void checkFastCallback()
 {
     //noInterrupt();
-    //if (ready_for_data)
+    if (ready_for_data)
     {   
         int count;
-        for (count=0; count < 4; count++)
+        ready_for_data=0;
+        for (count=0; count < 1; count++)
         {   
-            if (ep_rx_size[count] != 0xff)
+            //if (ep_rx_size[count] != 0xff)
             {
                 fastDataRxCb(ep_rx_size[count], ep_rx_data[count]);
-                ep_rx_size[count] = 0xff;
+                //ep_rx_size[count] = 0xff;
                 usb_set_ep_rx_stat(USB_FAST_ENDP, USB_EP_STAT_RX_VALID);
             }   
         }
-        ready_for_data=0;
+        
     }
     //interrupt();
 }
@@ -630,16 +653,16 @@ void checkFastCallback()
 static void fastDataRxCb_int()
 {
     int count;
-    for (count=0; count < 4; count++)
-        if (ep_rx_size[count] == 0xff)
+    //for (count=0; count < 4; count++)
+        //if (ep_rx_size[count] == 0xff)
         {
             ep_rx_size[count] = usb_get_ep_rx_count(USB_FAST_ENDP);
             usb_copy_from_pma((uint8*)&ep_rx_data[count], ep_rx_size[count],
                       USB_FAST_ADDR);
             ready_for_data = 1;
             
-            if (count < 4)
-                usb_set_ep_rx_stat(USB_FAST_ENDP, USB_EP_STAT_RX_VALID);
+            //if (count < 1)
+            //    usb_set_ep_rx_stat(USB_FAST_ENDP, USB_EP_STAT_RX_VALID);
         }
 }
 

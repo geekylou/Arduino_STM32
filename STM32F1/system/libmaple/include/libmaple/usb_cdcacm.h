@@ -113,7 +113,7 @@ USB_DEVICE_SUBCLASS_CDC,                    \
       .bcdUSB             = 0x0200,                                     \
       .bDeviceClass       = 239,\
       .bDeviceSubClass    = 2,\
-      .bDeviceProtocol    = 0x00,                                       \
+      .bDeviceProtocol    = 0x01,                                       \
       .bMaxPacketSize0    = 0x40,                                       \
       .idVendor           = vid,                                        \
       .idProduct          = pid,                                        \
