@@ -38,7 +38,7 @@
 
 #include "HardWire.h"
 
-uint8 HardWire::process() {
+uint8 HardWire::process(bool sendStop) {
     int8 res = i2c_master_xfer(sel_hard, &itc_msg, 1, 0);
     if (res == I2C_ERROR_PROTOCOL) {
         if (sel_hard->error_flags & I2C_SR1_AF) { /* NACK */
@@ -49,8 +49,12 @@ uint8 HardWire::process() {
         } else { /* Bus or Arbitration error */
             res = EOTHER;
         }
-        i2c_disable(sel_hard);
-        i2c_master_enable(sel_hard, (I2C_BUS_RESET | dev_flags));
+        
+        if (sendStop)
+        {
+            i2c_disable(sel_hard);
+            i2c_master_enable(sel_hard, (I2C_BUS_RESET | dev_flags));
+        }
     }
     return res;
 }

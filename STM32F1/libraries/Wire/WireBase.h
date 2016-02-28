@@ -65,7 +65,7 @@ protected:
     boolean tx_buf_overflow;
 
     // Force derived classes to define process function
-    virtual uint8 process() = 0;
+    virtual uint8 process(bool sendStop) = 0;
 public:
     WireBase() {}
     ~WireBase() {}
@@ -91,7 +91,13 @@ public:
      * buffer has not overflowed.
      */
     uint8 endTransmission(void);
-
+    
+    /*
+     * Call the process function to process the message if the TX
+     * buffer has not overflowed.
+     */
+    uint8 endTransmission(bool sendStop);
+    
     /*
      * Request bytes from a slave device and process the request,
      * storing into the receiving buffer.

@@ -76,6 +76,11 @@ void TwoWire::i2c_stop() {
     set_sda(HIGH);
 }
 
+void TwoWire::i2c_repeated_start() {
+    set_scl(HIGH);
+    set_sda(HIGH);
+}
+
 bool TwoWire::i2c_get_ack() {
     set_scl(LOW);
     set_sda(HIGH);
@@ -121,7 +126,7 @@ void TwoWire::i2c_shift_out(uint8 val) {
     }
 }
 
-uint8 TwoWire::process() {
+uint8 TwoWire::process(bool sendStop) {
     itc_msg.xferred = 0;
 
     uint8 sla_addr = (itc_msg.addr << 1);
@@ -156,13 +161,16 @@ uint8 TwoWire::process() {
             i2c_shift_out(itc_msg.data[i]);
             if (!i2c_get_ack()) 
 			{
-				i2c_stop();// Roger Clark. 20141110 added to set clock high again, as it will be left in a low state otherwise
+                i2c_stop();// Roger Clark. 20141110 added to set clock high again, as it will be left in a low state otherwise
                 return ENACKTRNS;
             }
             itc_msg.xferred++;
         }
     }
-    i2c_stop();
+    if (sendStop)
+        i2c_stop();
+    else
+        i2c_repeated_start();
     return SUCCESS;
 }
 
