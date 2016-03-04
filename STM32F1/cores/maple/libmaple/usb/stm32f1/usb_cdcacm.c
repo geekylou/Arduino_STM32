@@ -71,6 +71,7 @@ static void vcomDataTxCb(void);
 static void vcomDataRxCb(void);
 static uint8* vcomGetSetLineCoding(uint16);
 static void fastDataRxCb_int(void);
+static void fastDataTxCb_int();
 
 static void usbInit(void);
 static void usbReset(void);
@@ -108,6 +109,7 @@ typedef struct {
     usb_descriptor_interface_association FAST_InterfaceAssoication;
     usb_descriptor_interface     FAST_Interface;
     usb_descriptor_endpoint      FAST_DataOutEndpoint;
+    usb_descriptor_endpoint      FAST_DataInEndpoint;
 } __packed usb_descriptor_config;
 
 #define MAX_POWER (100 >> 1)
@@ -131,7 +133,7 @@ static const usb_descriptor_config usbVcomDescriptor_Config = {
         .bFunctionClass     = USB_DEVICE_CLASS_CDC,
         .bFunctionSubClass  = USB_DEVICE_SUBCLASS_CDC,
         .bFunctionProtocol  = 0x00,
-        .iFunction          = 0x01,        
+        .iFunction          = 0x02,        
     },
     .CCI_Interface = {
         .bLength            = sizeof(usb_descriptor_interface),
@@ -223,14 +225,14 @@ static const usb_descriptor_config usbVcomDescriptor_Config = {
         .bFunctionClass     = 0xff,
         .bFunctionSubClass  = USB_DEVICE_SUBCLASS_CDC,
         .bFunctionProtocol  = 0x00,
-        .iFunction          = 0x02,        
+        .iFunction          = 0x03,        
     },
     .FAST_Interface = {
         .bLength            = sizeof(usb_descriptor_interface),
         .bDescriptorType    = USB_DESCRIPTOR_TYPE_INTERFACE,
         .bInterfaceNumber   = 0x02,
         .bAlternateSetting  = 0x00,
-        .bNumEndpoints      = 0x01,
+        .bNumEndpoints      = 0x02,
         .bInterfaceClass    = 0xff, //USB_INTERFACE_CLASS_VENDOR, //USB_INTERFACE_CLASS_DIC,
         .bInterfaceSubClass = 0x00, /* None */
         .bInterfaceProtocol = 0x00, /* None */
@@ -242,6 +244,14 @@ static const usb_descriptor_config usbVcomDescriptor_Config = {
         .bEndpointAddress = (USB_DESCRIPTOR_ENDPOINT_OUT | 0x4 /*USB_CDCACM_RX_ENDP*/),
         .bmAttributes     = USB_EP_TYPE_BULK,
         .wMaxPacketSize   = USB_FAST_EPSIZE,
+        .bInterval        = 0x00,
+    },
+    .FAST_DataInEndpoint = {
+        .bLength          = sizeof(usb_descriptor_endpoint),
+        .bDescriptorType  = USB_DESCRIPTOR_TYPE_ENDPOINT,
+        .bEndpointAddress = (USB_DESCRIPTOR_ENDPOINT_IN | USB_FAST_TX_ENDP ),
+        .bmAttributes     = USB_EP_TYPE_INTERRUPT,
+        .wMaxPacketSize   = USB_FAST_TX_EPSIZE,
         .bInterval        = 0x00,
     },
 #endif
@@ -285,6 +295,13 @@ static const usb_descriptor_string usbVcomDescriptor_iProduct = {
     .bString = {'M', 0, 'a', 0, 'p', 0, 'l', 0, 'e', 0},
 };
 
+/* FIXME move to Wirish */
+static const usb_descriptor_string usbVcomDescriptor_iProductTFT = {
+    .bLength = USB_DESCRIPTOR_STRING_LEN(7),
+    .bDescriptorType = USB_DESCRIPTOR_TYPE_STRING,
+    .bString = {'T', 0, 'F', 0, 'T', 0, 'D', 0, 'I', 0,'S', 0,'P', 0},
+};
+
 static ONE_DESCRIPTOR Device_Descriptor = {
     (uint8*)&usbVcomDescriptor_Device,
     sizeof(usb_descriptor_device)
@@ -295,12 +312,12 @@ static ONE_DESCRIPTOR Config_Descriptor = {
     sizeof(usb_descriptor_config)
 };
 
-#define N_STRING_DESCRIPTORS 3
+#define N_STRING_DESCRIPTORS 4
 static ONE_DESCRIPTOR String_Descriptor[N_STRING_DESCRIPTORS] = {
     {(uint8*)&usbVcomDescriptor_LangID,       USB_DESCRIPTOR_STRING_LEN(1)},
     {(uint8*)&usbVcomDescriptor_iManufacturer,USB_DESCRIPTOR_STRING_LEN(8)},
     {(uint8*)&usbVcomDescriptor_iProduct,     USB_DESCRIPTOR_STRING_LEN(5)},
-    {(uint8*)&usbVcomDescriptor_iProduct,     USB_DESCRIPTOR_STRING_LEN(5)}
+    {(uint8*)&usbVcomDescriptor_iProductTFT,     USB_DESCRIPTOR_STRING_LEN(7)}
 };
 
 /*
@@ -344,7 +361,7 @@ static void (*ep_int_in[7])(void) =
      NOP_Process,
      NOP_Process,
      NOP_Process,
-     NOP_Process,
+     fastDataTxCb_int,
      NOP_Process,
      NOP_Process};
 
@@ -364,7 +381,7 @@ static void (*ep_int_out[7])(void) =
  * functionality.
  */
 
-#define NUM_ENDPTS                0x05
+#define NUM_ENDPTS                0x06
 __weak DEVICE Device_Table = {
     .Total_Endpoint      = NUM_ENDPTS,
     .Total_Configuration = 1
@@ -625,9 +642,10 @@ static void vcomDataRxCb(void) {
     }
 }
 
-uint32 ready_for_data = 0;
-uint32 ep_rx_size[1]= {0xff};
-uint8  ep_rx_data[1][65];
+volatile uint32 fast_irq_empty = 1;
+volatile uint32 ready_for_data = 0;
+volatile uint32 ep_rx_size[1]= {0xff};
+volatile uint8  ep_rx_data[1][65];
 
 void checkFastCallback()
 {
@@ -648,6 +666,23 @@ void checkFastCallback()
         
     }
     //interrupt();
+}
+
+int sendFastTxCallback(uint8_t *buffer,uint8_t size)
+{
+    if (fast_irq_empty && size > 0)
+    {
+        usb_copy_to_pma(buffer, size, USB_FAST_TX_ADDR);
+        usb_set_ep_tx_count(USB_FAST_TX_ENDP, size);
+        fast_irq_empty = 0;
+        usb_set_ep_tx_stat(USB_FAST_TX_ENDP, USB_EP_STAT_TX_VALID);        
+    }
+    return size;
+}
+
+static void fastDataTxCb_int()
+{
+    fast_irq_empty = 1;
 }
 
 static void fastDataRxCb_int()
@@ -738,6 +773,13 @@ static void usbReset(void) {
     usb_set_ep_rx_addr(USB_FAST_ENDP, USB_FAST_ADDR);
     usb_set_ep_rx_count(USB_FAST_ENDP, USB_FAST_EPSIZE);
     usb_set_ep_rx_stat(USB_FAST_ENDP, USB_EP_STAT_RX_VALID);
+    
+    /* set up data endpoint IN (FAST) */
+    usb_set_ep_type(USB_FAST_TX_ENDP, USB_EP_EP_TYPE_INTERRUPT);
+    usb_set_ep_tx_addr(USB_FAST_TX_ENDP, USB_FAST_TX_ADDR);
+    usb_set_ep_tx_stat(USB_FAST_TX_ENDP, USB_EP_STAT_TX_NAK);
+    usb_set_ep_rx_stat(USB_FAST_TX_ENDP, USB_EP_STAT_RX_DISABLED);
+    
     USBLIB->state = USB_ATTACHED;
     SetDeviceAddress(0);
 
@@ -746,6 +788,7 @@ static void usbReset(void) {
     n_unsent_bytes = 0;
     rx_offset = 0;
     transmitting = 0;
+    fast_irq_empty = 1;
 }
 
 static RESULT usbDataSetup(uint8 request) {
@@ -810,7 +853,7 @@ static RESULT usbNoDataSetup(uint8 request) {
 static RESULT usbGetInterfaceSetting(uint8 interface, uint8 alt_setting) {
     if (alt_setting > 0) {
         return USB_UNSUPPORT;
-    } else if (interface > 1) {
+    } else if (interface > 2) {
         return USB_UNSUPPORT;
     }
 

@@ -162,22 +162,22 @@ typedef struct usblib_dev {
     uint32 irq_mask;
     void (**ep_int_in)(void);
     void (**ep_int_out)(void);
-    usb_dev_state state;
+    volatile usb_dev_state state;
     usb_dev_state prevState;
     rcc_clk_id clk_id;
 } usblib_dev;
 
-extern usblib_dev *USBLIB;
+extern volatile usblib_dev *USBLIB;
 
 void usb_init_usblib(usblib_dev *dev,
                      void (**ep_int_in)(void),
                      void (**ep_int_out)(void));
 
-static inline uint8 usb_is_connected(usblib_dev *dev) {
+static inline uint8 usb_is_connected(volatile usblib_dev *dev) {
     return dev->state != USB_UNCONNECTED;
 }
 
-static inline uint8 usb_is_configured(usblib_dev *dev) {
+static inline uint8 usb_is_configured(volatile usblib_dev *dev) {
     return dev->state == USB_CONFIGURED;
 }
 

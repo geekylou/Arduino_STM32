@@ -42,6 +42,7 @@
 extern "C"
 {
   void fastDataRxCb(uint32 ep_rx_size, uint8 *ep_rx_data);
+  int sendFastTxCallback(uint8_t *buffer,uint8_t size);
   void checkFastCallback();
 }
 extern "C" {
@@ -101,6 +102,11 @@ extern "C" {
 #define USB_FAST_ENDP              4
 #define USB_FAST_ADDR              0x150
 #define USB_FAST_EPSIZE            0x40
+
+#define USB_FAST_TX_ENDP              5
+#define USB_FAST_TX_ADDR              0x1A0
+#define USB_FAST_TX_EPSIZE            0x22
+
 #ifndef __cplusplus
 
 // USB_DEVICE_CLASS_CDC,                       \

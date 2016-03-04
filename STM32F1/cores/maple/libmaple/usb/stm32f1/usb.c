@@ -79,7 +79,7 @@ static usblib_dev usblib = {
     .prevState = USB_UNCONNECTED,
     .clk_id = RCC_USB,
 };
-usblib_dev *USBLIB = &usblib;
+volatile usblib_dev *USBLIB = &usblib;
 
 /*
  * Routines
@@ -115,7 +115,7 @@ static void usb_suspend(void) {
     USB_BASE->CNTR = cntr;
     cntr |= USB_CNTR_LP_MODE;
     USB_BASE->CNTR = cntr;
-
+    
     USBLIB->prevState = USBLIB->state;
     USBLIB->state = USB_SUSPENDED;
 }
@@ -190,32 +190,35 @@ void __irq_usb_lp_can_rx0(void) {
     /* Use USB_ISR_MSK to only include code for bits we care about. */
 
 #if (USB_ISR_MSK & USB_ISTR_RESET)
+#endif
     if (istr & USB_ISTR_RESET & USBLIB->irq_mask) {
         USB_BASE->ISTR = ~USB_ISTR_RESET;
         pProperty->Reset();
     }
-#endif
 
 #if (USB_ISR_MSK & USB_ISTR_PMAOVR)
+
     if (istr & ISTR_PMAOVR & USBLIB->irq_mask) {
         USB_BASE->ISTR = ~USB_ISTR_PMAOVR;
     }
-#endif
 
+    #endif
 #if (USB_ISR_MSK & USB_ISTR_ERR)
+#endif
     if (istr & USB_ISTR_ERR & USBLIB->irq_mask) {
         USB_BASE->ISTR = ~USB_ISTR_ERR;
     }
-#endif
 
 #if (USB_ISR_MSK & USB_ISTR_WKUP)
+#endif
     if (istr & USB_ISTR_WKUP & USBLIB->irq_mask) {
         USB_BASE->ISTR = ~(USB_ISTR_WKUP | USB_ISTR_SUSP);
+        USB_BASE->ISTR = ~USB_ISTR_SUSP;
         usb_resume(RESUME_EXTERNAL);
     }
-#endif
 
 #if (USB_ISR_MSK & USB_ISTR_SUSP)
+#endif
     if (istr & USB_ISTR_SUSP & USBLIB->irq_mask) {
         /* check if SUSPEND is possible */
         if (SUSPEND_ENABLED) {
@@ -225,33 +228,34 @@ void __irq_usb_lp_can_rx0(void) {
             usb_resume(RESUME_LATER);
         }
         /* clear of the ISTR bit must be done after setting of CNTR_FSUSP */
-        USB_BASE->ISTR = ~(USB_ISTR_WKUP | USB_ISTR_SUSP);
+        USB_BASE->ISTR = ~USB_ISTR_WKUP;
+        USB_BASE->ISTR = ~USB_ISTR_SUSP;
     }
-#endif
 
 #if (USB_ISR_MSK & USB_ISTR_SOF)
+#endif
     if (istr & USB_ISTR_SOF & USBLIB->irq_mask) {
         USB_BASE->ISTR = ~USB_ISTR_SOF;
     }
-#endif
 
 #if (USB_ISR_MSK & USB_ISTR_ESOF)
+    #endif
     if (istr & USB_ISTR_ESOF & USBLIB->irq_mask) {
         USB_BASE->ISTR = ~USB_ISTR_ESOF;
         /* resume handling timing is made with ESOFs */
         usb_resume(RESUME_ESOF); /* request without change of the machine state */
     }
-#endif
+
 
     /*
      * Service the correct transfer interrupt.
      */
 
 #if (USB_ISR_MSK & USB_ISTR_CTR)
+#endif
     if (istr & USB_ISTR_CTR & USBLIB->irq_mask) {
         dispatch_ctr_lp();
     }
-#endif
 }
 
 /*
