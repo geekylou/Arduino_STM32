@@ -55,7 +55,8 @@
 
 class WireBase { // Abstraction is awesome!
 protected:
-    i2c_msg itc_msg;
+    i2c_msg itc_msg[2];
+    uint8_t itc_msgs = 1;
     uint8 rx_buf[WIRE_BUFSIZ];      /* receive buffer */
     uint8 rx_buf_idx;               /* first unread idx in rx_buf */
     uint8 rx_buf_len;               /* number of bytes read */
@@ -104,6 +105,8 @@ public:
      */
     uint8 requestFrom(uint8, int);
 
+    uint8 requestFromRegister(uint8, uint8, int);
+    
     /*
      * Allow only 8 bit addresses to be used when requesting bytes
      */

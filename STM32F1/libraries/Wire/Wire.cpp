@@ -127,10 +127,10 @@ void TwoWire::i2c_shift_out(uint8 val) {
 }
 
 uint8 TwoWire::process(bool sendStop) {
-    itc_msg.xferred = 0;
+    itc_msg[0].xferred = 0;
 
-    uint8 sla_addr = (itc_msg.addr << 1);
-    if (itc_msg.flags == I2C_MSG_READ) {
+    uint8 sla_addr = (itc_msg[0].addr << 1);
+    if (itc_msg[0].flags == I2C_MSG_READ) {
         sla_addr |= I2C_READ;
     }
     i2c_start();
@@ -142,10 +142,10 @@ uint8 TwoWire::process(bool sendStop) {
         return ENACKADDR;
     }
     // Recieving
-    if (itc_msg.flags == I2C_MSG_READ) {
-        while (itc_msg.xferred < itc_msg.length) {
-            itc_msg.data[itc_msg.xferred++] = i2c_shift_in();
-            if (itc_msg.xferred < itc_msg.length) 
+    if (itc_msg[0].flags == I2C_MSG_READ) {
+        while (itc_msg[0].xferred < itc_msg[0].length) {
+            itc_msg[0].data[itc_msg[0].xferred++] = i2c_shift_in();
+            if (itc_msg[0].xferred < itc_msg[0].length) 
 			{
                 i2c_send_ack();
             } 
@@ -157,14 +157,14 @@ uint8 TwoWire::process(bool sendStop) {
     }
     // Sending
     else {
-        for (uint8 i = 0; i < itc_msg.length; i++) {
-            i2c_shift_out(itc_msg.data[i]);
+        for (uint8 i = 0; i < itc_msg[0].length; i++) {
+            i2c_shift_out(itc_msg[0].data[i]);
             if (!i2c_get_ack()) 
 			{
                 i2c_stop();// Roger Clark. 20141110 added to set clock high again, as it will be left in a low state otherwise
                 return ENACKTRNS;
             }
-            itc_msg.xferred++;
+            itc_msg[0].xferred++;
         }
     }
     if (sendStop)
